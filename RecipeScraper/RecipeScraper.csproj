@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net6.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>SecondRecipeScraper</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Fizzler.Systems.HtmlAgilityPack" Version="1.2.1" />
+      <PackageReference Include="HtmlAgilityPack" Version="1.11.50" />
+      <PackageReference Include="RestSharp" Version="110.2.1-alpha.0.10" />
+    </ItemGroup>
+
+</Project>

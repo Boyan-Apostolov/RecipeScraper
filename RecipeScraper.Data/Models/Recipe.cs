@@ -10,4 +10,6 @@ public class Recipe
     public ICollection<Product> Products { get; set; }
 
     public string CookingInstructions { get; set; }
+
+    public RecipeCategory? RecipeCategory { get; set; }
 }

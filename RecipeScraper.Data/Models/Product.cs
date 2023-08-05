@@ -8,5 +8,5 @@ public class Product
 
     public ProductPurpose? ProductPurpose { get; set; }
 
-    public ProductCategory ProductCategory { get; set; }
+    public RecipeCategory RecipeCategory { get; set; }
 }

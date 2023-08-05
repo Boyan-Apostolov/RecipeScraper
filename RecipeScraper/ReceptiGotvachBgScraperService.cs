@@ -71,6 +71,11 @@ public class ReceptiGotvachBgScraperService
 
         var recipe = new Recipe();
 
+        if (recipeUrl == "https://recepti.gotvach.bg/r-258163-Диетична_руска_салата")
+        {
+            ;
+        }
+
         recipe.Url = recipeUrl;
         recipe.Title = currentPage.QuerySelector("h1").InnerText;
 
@@ -97,7 +102,13 @@ public class ReceptiGotvachBgScraperService
         recipe.Products = new List<Product>();
         var productItems = currentPage
             .QuerySelectorAll(".products.new li");
-
+        
+        var recipeCategory = currentPage.QuerySelector(".topir.left").InnerText;
+        if (!string.IsNullOrWhiteSpace(recipeCategory) && recipeCategory != "ПОДОБНИ РЕЦЕПТИ")
+        {
+            recipe.RecipeCategory = new RecipeCategory() { Name = recipeCategory };
+        }
+        
         var lastSubItem = string.Empty;
         foreach (var productItem in productItems)
         {
@@ -120,14 +131,13 @@ public class ReceptiGotvachBgScraperService
                     : productItemHasQuantityText[1].InnerText
                         .Split(" - ")[1];
 
-                var productCategory = productItem.QuerySelector(".topir.left").InnerText;
-
+               
                 recipe.Products.Add(new Product()
                 {
                     Name = productItemName,
                     ProductQuantity = new ProductQuantity() { QuantityText = productItemQuantityText },
                     ProductPurpose = new ProductPurpose() { Name = lastSubItem },
-                    ProductCategory = new ProductCategory() { Name = productCategory }
+                    // ProductCategory = new ProductCategory() { Name = productCategory }
                 });
             }
         }

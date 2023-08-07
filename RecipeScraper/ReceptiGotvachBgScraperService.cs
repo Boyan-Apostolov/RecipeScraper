@@ -1,19 +1,24 @@
 using System.Net;
 using Fizzler.Systems.HtmlAgilityPack;
 using HtmlAgilityPack;
+using RecipeScraper.Data;
 using RecipeScraper.Models;
 using RestSharp;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
 
 namespace RecipeScraper;
 
 public class ReceptiGotvachBgScraperService
 {
-    private const string BaseUrl = "https://recepti.gotvach.bg/";
+    private const string BaseUrl = "https://recepti.gotvach.bg";
     private readonly RestClient _restClient;
     private readonly CommonServiceHelper _helper;
+    private readonly RecipesDbContext _recipesDbContext;
 
-    public ReceptiGotvachBgScraperService()
+    public ReceptiGotvachBgScraperService(RecipesDbContext recipesDbContext)
     {
+        _recipesDbContext = recipesDbContext;
         _restClient = new RestClient(BaseUrl);
         _helper = new CommonServiceHelper(_restClient);
     }
@@ -37,8 +42,10 @@ public class ReceptiGotvachBgScraperService
             }
         }
 
+        await _recipesDbContext.SaveChangesAsync();
         return parsedRecipes;
     }
+
     async Task<List<string>> GetPageRecipesLinks(int startPage, int endPage)
     {
         var foundLinks = new List<string>();
@@ -67,17 +74,22 @@ public class ReceptiGotvachBgScraperService
 
     async Task<Recipe> GetRecipeData(string recipeUrl)
     {
+        var alreadySavedRecipe = await _recipesDbContext
+            .Recipes
+            .FirstOrDefaultAsync(r => r.Url == recipeUrl);
+        if (alreadySavedRecipe != null) return alreadySavedRecipe;
+
         var currentPage = await _helper.GetDocumentNode(recipeUrl);
 
         var recipe = new Recipe();
 
-        if (recipeUrl == "https://recepti.gotvach.bg/r-258163-Диетична_руска_салата")
-        {
-            ;
-        }
-
         recipe.Url = recipeUrl;
         recipe.Title = currentPage.QuerySelector("h1").InnerText;
+
+        var foundImageUrl = currentPage.QuerySelector("#gall img").GetAttributeValue("src", "");
+        recipe.ImageUrl = !string.IsNullOrWhiteSpace(foundImageUrl) && !foundImageUrl.Contains("addnew")
+            ? $"{BaseUrl}{foundImageUrl}"
+            : "";
 
         var totalTimeText = currentPage //Format : "125 mins."
             .QuerySelector(".icb-tot")?
@@ -99,16 +111,22 @@ public class ReceptiGotvachBgScraperService
         recipe.CookingInstructions = currentPage.QuerySelector(".text").InnerText
             .Replace("Начин на приготвяне", "");
 
-        recipe.Products = new List<Product>();
+        recipe.RecipeProducts = new List<RecipeProduct>();
         var productItems = currentPage
             .QuerySelectorAll(".products.new li");
-        
+
         var recipeCategory = currentPage.QuerySelector(".topir.left").InnerText;
         if (!string.IsNullOrWhiteSpace(recipeCategory) && recipeCategory != "ПОДОБНИ РЕЦЕПТИ")
         {
-            recipe.RecipeCategory = new RecipeCategory() { Name = recipeCategory };
+            var foundRecipeCategory = await _recipesDbContext
+                .RecipeCategories
+                .FirstOrDefaultAsync(rc => rc.Name == recipeCategory);
+
+            recipe.RecipeCategory = foundRecipeCategory != null
+                ? foundRecipeCategory
+                : new RecipeCategory() { Name = recipeCategory };
         }
-        
+
         var lastSubItem = string.Empty;
         foreach (var productItem in productItems)
         {
@@ -131,17 +149,36 @@ public class ReceptiGotvachBgScraperService
                     : productItemHasQuantityText[1].InnerText
                         .Split(" - ")[1];
 
-               
-                recipe.Products.Add(new Product()
+                var foundProductQuantity = await _recipesDbContext
+                    .ProductQuantities
+                    .FirstOrDefaultAsync(pq => pq.QuantityText == productItemQuantityText);
+
+                var foundProductPurpose = await _recipesDbContext
+                    .ProductPurposes
+                    .FirstOrDefaultAsync(pp => pp.Name == lastSubItem);
+
+                var foundProduct = await _recipesDbContext
+                    .Products
+                    .FirstOrDefaultAsync(p => p.Name == productItemName);
+
+                var usableProduct = foundProduct != null
+                    ? foundProduct
+                    : new Product() { Name = productItemName };
+
+                recipe.RecipeProducts.Add(new RecipeProduct()
                 {
-                    Name = productItemName,
-                    ProductQuantity = new ProductQuantity() { QuantityText = productItemQuantityText },
-                    ProductPurpose = new ProductPurpose() { Name = lastSubItem },
-                    // ProductCategory = new ProductCategory() { Name = productCategory }
+                    Product = usableProduct,
+                    ProductQuantity = foundProductQuantity != null
+                        ? foundProductQuantity
+                        : new ProductQuantity() { QuantityText = productItemQuantityText },
+                    ProductPurpose = string.IsNullOrWhiteSpace(lastSubItem) || foundProductPurpose == null
+                        ? new ProductPurpose() { Name = lastSubItem }
+                        : foundProductPurpose,
                 });
             }
         }
 
+        _recipesDbContext.Recipes.Add(recipe);
         return recipe;
     }
 }
